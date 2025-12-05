@@ -1,0 +1,90 @@
+# -----------------------------------------------------------------
+#
+#    NAME
+#      Dynamicscaling Telegraf InlfuxDB Grafana (ODyS-TIG)
+#
+#    DESCRIPTION
+#      ODyS-TIG compose file
+#
+#    AUTHOR:
+#      ruggero.citton@oracle.com 
+#
+#    NOTES
+#
+#    MODIFIED   (MM/DD/YY)
+#    rcitton     12/03/25 - Use .env file for secrets
+#    rcitton     12/02/25 - SUpport for influxdb 2.x
+#    rcitton     03/16/23 - creation
+#
+# -----------------------------------------------------------------
+version: '3.6'
+services:
+  telegraf:
+    image: telegraf
+    container_name: odys-telegraf
+    restart: always
+    user: "${UID:-1000}:${GID:-1000}" 
+    cap_add:
+      - NET_RAW
+    environment:
+      - TZ=${TIMEZONE}
+    volumes:
+      - ${TIG_ROOT}/telegraf/odys_telegraf.conf:/etc/telegraf/telegraf.conf:ro
+      - ${TIG_ROOT}/odys_csv/odys_csv_new:/odys_csv_new:rw
+      - ${TIG_ROOT}/odys_csv/odys_csv_old:/odys_csv_old:rw
+      - ${TIG_ROOT}/odys_csv/odys_csv_err:/odys_csv_err:rw
+    command: ["telegraf", "--config", "/etc/telegraf/telegraf.conf"]
+    depends_on:
+      - influxdb
+    networks:
+      - odys-tig_network
+    ports:
+      - '8125:8125'
+
+  influxdb:
+    image: influxdb:2.7
+    container_name: odys-influxdb
+    restart: always
+    environment:
+      - DOCKER_INFLUXDB_INIT_MODE=setup
+      - DOCKER_INFLUXDB_INIT_USERNAME=${INFLUXDB_INIT_USERNAME}
+      - DOCKER_INFLUXDB_INIT_PASSWORD=${INFLUXDB_INIT_PASSWORD}
+      - DOCKER_INFLUXDB_INIT_ORG=${INFLUXDB_INIT_ORG}
+      - DOCKER_INFLUXDB_INIT_ADMIN_TOKEN=${INFLUXDB_INIT_ADMIN_TOKEN}
+      - DOCKER_INFLUXDB_INIT_BUCKET=dynamicscaling
+      - DOCKER_INFLUXDB_INIT_RETENTION=0s
+    ports:
+      - '8086:8086'
+    networks:
+      - odys-tig_network
+    volumes:
+      - influxdb_data:/var/lib/influxdb2:rw
+
+  grafana:
+    image: grafana/grafana
+    container_name: odys-grafana
+    restart: always
+    depends_on:
+      - influxdb
+    environment:
+      - GF_SECURITY_ADMIN_USER=${GF_SECURITY_ADMIN_USER}
+      - GF_SECURITY_ADMIN_PASSWORD=${GF_SECURITY_ADMIN_PASSWORD}
+      - GF_INSTALL_PLUGINS=
+    networks:
+      - odys-tig_network
+    ports:
+      - '3000:3000'
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ${TIG_ROOT}/grafana/provisioning/dashboards/dynamicscaling.yaml:/etc/grafana/provisioning/dashboards/main.yaml
+      - ${TIG_ROOT}/grafana/provisioning/dashboards:/etc/grafana/provisioning/dashboards
+
+volumes:
+  grafana_data: {}
+  influxdb_data: {}
+
+networks: 
+  odys-tig_network:
+# -----------------------------------------------------------------
+# EndOfFile
+# -----------------------------------------------------------------

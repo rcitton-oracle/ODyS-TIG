@@ -1,0 +1,55 @@
+# -----------------------------------------------------------------
+#
+#    NAME
+#      Dynamicscaling Telegraf InlfuxDB Grafana (ODyS-TIG)
+#
+#    DESCRIPTION
+#      ODyS-TIG Grafana datasource
+#
+#    AUTHOR:
+#      ruggero.citton@oracle.com 
+#
+#    NOTES
+#      curl -H "Authorization: Bearer APIKEY" http://localhost:3000/api/datasources |jq
+#
+#    MODIFIED   (MM/DD/YY)
+#    rcitton     12/03/25 - Use environment variables for secrets
+#    rcitton     12/02/25 - Support for InfluxDB 2.x
+#    rcitton     03/16/23 - creation
+#
+# -----------------------------------------------------------------
+apiVersion: 1
+
+deleteDatasources:
+  - name: DYNAMICSCALING
+    orgId: 1
+
+datasources:
+- name: DYNAMICSCALING
+  type: influxdb
+  access: proxy
+  url: http://influxdb:8086
+  # Basic Auth is false for V2 Token Auth
+  basicAuth: false
+  isDefault: true
+  jsonData:
+     version: Flux 
+     # Get organization from config.env
+     organization: PLACEHOLDER_INFLUXDB_ORG
+     authMethod: Token
+     httpHeaderName1: "Authorization"
+     dbName: "dynamicscaling"
+     tlsAuth: false
+     tlsAuthWithCACert: false
+  secureJsonData:
+    # Get token from config.env
+    httpHeaderValue1: PLACEHOLDER_INFLUXDB_TOKEN
+    tlsCACert: ""
+    tlsClientCert: ""
+    tlsClientKey: ""
+  version: 1
+  editable: true
+  database: dynamicscaling
+# -----------------------------------------------------------------
+# EndOfFile
+# -----------------------------------------------------------------

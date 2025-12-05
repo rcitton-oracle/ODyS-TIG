@@ -1,0 +1,3 @@
+In this folder 'dynamicscaling-chart-2.1.0-x.el8.<arch>.rpm' is required
+Pay attention to the RPM for right processor architecture x86_64 vs aarch64 in use
+
