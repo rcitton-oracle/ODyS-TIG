@@ -98,7 +98,8 @@ ODyS-TIG/odys_chart/
 
 ---
 
-## 🚀 Getting Started 
+## 🚀 Getting Started
+For simplicity, on Linux you should disable SELinux (`setenforce 0`)
 
 1. 📥 Clone repository: `git clone https://github.com/oracle/ODYS-TIG.git`
 2. 📂 Enter folder: `cd ODyS-TIG`
