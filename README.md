@@ -45,7 +45,7 @@ ODyS‑TIG 2.1.0 supports **x86_64** and **ARM64 (aarch64)** across Linux and ma
 * 🔵 Oracle Linux 9 — x86_64
 * 🔵 Oracle Linux 8 — x86_64 & aarch64
 * 🟣 Ubuntu 24.03 — x86_64
-* 🍏 macOS Sequoia/Tahoe — Intel & Apple Silicon
+* 🍏 macOS Tahoe
 * 🪟 Windows 11 — x86_64 (via podman machine)
 
 > **macOS requirement:** for podman allocate at least **2 CPUs** and **8 GB RAM** and setup a volume:
@@ -54,7 +54,7 @@ podman machine init --cpus 2 --memory 8192 --disk-size 50 --volume /Users/<usern
 ```
     Note: 
     '/Users/<username>/GIT/ODyS-TIG' must be the same path defined by 'MACOS_HOST_PROJECT_PATH' in 'config.env'
-    '/ODyS-TIG' (on Tahoe), '/var/home/core/ODyS-TIG' (on Sequoia) must be the same path defined by 'VM_MOUNT_ROOT' in 'config.env'
+    '/ODyS-TIG' must be the same path defined by 'VM_MOUNT_ROOT' in 'config.env'
 
 ---
 
