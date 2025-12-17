@@ -1,0 +1,148 @@
+# -----------------------------------------------------------------
+#
+#    NAME
+#      Dynamicscaling Telegraf InlfuxDB Grafana (ODyS-TIG)
+#
+#    DESCRIPTION
+#      ODyS-TIG compose file
+#
+#    AUTHOR:
+#      ruggero.citton@oracle.com 
+#
+#    NOTES
+#
+#    MODIFIED   (MM/DD/YY)
+#    rcitton     12/10/25 - Optimization
+#    rcitton     12/03/25 - Use .env file
+#    rcitton     12/02/25 - SUpport for influxdb 2.x
+#    rcitton     03/16/23 - creation
+#
+# -----------------------------------------------------------------
+version: '3.8'
+
+services:
+
+  telegraf:
+    image: docker.io/library/telegraf:latest
+    container_name: odys-telegraf
+    restart: unless-stopped
+    user: "${UID:-1000}:${GID:-1000}"
+    cap_drop:
+      - ALL
+    cap_add:
+      - NET_RAW
+    security_opt:
+      - label=disable
+    environment:
+      TZ: "${TIMEZONE}"
+    volumes:
+      - ${TIG_ROOT}/telegraf/odys_telegraf.conf:/etc/telegraf/telegraf.conf:ro
+      - ${TIG_ROOT}/odys_csv/odys_csv_new:/odys_csv_new:rw
+      - ${TIG_ROOT}/odys_csv/odys_csv_old:/odys_csv_old:rw
+      - ${TIG_ROOT}/odys_csv/odys_csv_err:/odys_csv_err:rw
+    command: ["telegraf", "--config", "/etc/telegraf/telegraf.conf"]
+    depends_on:
+      influxdb:
+        condition: service_healthy
+    ports:
+      - "8125:8125"
+    healthcheck:
+      test: ["CMD", "pgrep", "-f", "telegraf"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    logging:
+      driver: "k8s-file"
+      options:
+        max-size: "20m"
+        max-file: "3"
+    networks:
+      - odys-tig_network
+
+  influxdb:
+    image: docker.io/library/influxdb:2.7
+    container_name: odys-influxdb
+    restart: unless-stopped
+    user: "1000:1000"
+    cap_drop:
+      - ALL
+    security_opt:
+      - label=disable
+    environment:
+      DOCKER_INFLUXDB_INIT_MODE: setup
+      DOCKER_INFLUXDB_INIT_USERNAME: ${INFLUXDB_INIT_USERNAME}
+      DOCKER_INFLUXDB_INIT_PASSWORD: ${INFLUXDB_INIT_PASSWORD}
+      DOCKER_INFLUXDB_INIT_ORG: ${INFLUXDB_INIT_ORG}
+      DOCKER_INFLUXDB_INIT_ADMIN_TOKEN: ${INFLUXDB_INIT_ADMIN_TOKEN}
+      DOCKER_INFLUXDB_INIT_BUCKET: dynamicscaling
+      DOCKER_INFLUXDB_INIT_RETENTION: 0s
+    ports:
+      - "8086:8086"
+    volumes:
+      - influxdb_data:/var/lib/influxdb2:rw
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8086/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+    logging:
+      driver: "k8s-file"
+      options:
+        max-size: "20m"
+        max-file: "3"
+    networks:
+      - odys-tig_network
+
+  grafana:
+    image: docker.io/grafana/grafana:latest
+    container_name: odys-grafana
+    restart: unless-stopped
+    user: "472:472"
+    cap_drop:
+      - ALL
+    security_opt:
+      - label=disable
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GF_SECURITY_ADMIN_USER}
+      GF_SECURITY_ADMIN_PASSWORD: ${GF_SECURITY_ADMIN_PASSWORD}
+      GF_INSTALL_PLUGINS: ""
+    depends_on:
+      influxdb:
+        condition: service_healthy
+    ports:
+      - "3000:3000"
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ${TIG_ROOT}/grafana/provisioning/dashboards/dynamicscaling.yaml:/etc/grafana/provisioning/dashboards/main.yaml
+      - ${TIG_ROOT}/grafana/provisioning/dashboards:/etc/grafana/provisioning/dashboards
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/api/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+    logging:
+      driver: "k8s-file"
+      options:
+        max-size: "20m"
+        max-file: "3"
+    networks:
+      - odys-tig_network
+
+# -----------------------------------------------------------------
+# Volumes
+# -----------------------------------------------------------------
+volumes:
+  grafana_data: {}
+  influxdb_data: {}
+
+# -----------------------------------------------------------------
+# Dedicated network
+# -----------------------------------------------------------------
+networks:
+  odys-tig_network:
+    driver: bridge
+
+# -----------------------------------------------------------------
+# EndOfFile
+# -----------------------------------------------------------------

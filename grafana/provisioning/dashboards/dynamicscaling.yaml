@@ -1,0 +1,34 @@
+# -----------------------------------------------------------------
+#
+#    NAME
+#      Dynamicscaling Telegraf InlfuxDB Grafana (ODyS-TIG)
+#
+#    DESCRIPTION
+#      ODyS-TIG Grafana datasource
+#
+#    AUTHOR:
+#      ruggero.citton@oracle.com 
+#
+#    NOTES
+#      curl -H "Authorization: Bearer APIKEY" http://localhost:3000/api/datasources |jq
+#
+#    MODIFIED   (MM/DD/YY)
+#    rcitton     03/16/23 - creation
+#
+# -----------------------------------------------------------------
+apiVersion: 1
+
+providers:
+  - name: "Dashboard provider"
+    orgId: 1
+    type: file
+    disableDeletion: false
+    updateIntervalSeconds: 10
+    allowUiUpdates: true
+    options:
+      path: /etc/grafana/provisioning/dashboards
+      foldersFromFilesStructure: true
+
+# -----------------------------------------------------------------
+# EndOfFile
+# -----------------------------------------------------------------
