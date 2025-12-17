@@ -45,7 +45,7 @@ ODyS‑TIG 2.1.0 supports **x86_64** and **ARM64 (aarch64)** across Linux and ma
 * 🔵 Oracle Linux 9 — x86_64
 * 🔵 Oracle Linux 8 — x86_64 & aarch64
 * 🟣 Ubuntu 24.03 — x86_64
-* 🍏 macOS Tahoe
+* 🍏 macOS Tahoe 26.2
 * 🪟 Windows 11 — x86_64 (via podman machine)
 
 > **macOS requirement:** for podman allocate at least **2 CPUs** and **8 GB RAM** and setup a volume:
