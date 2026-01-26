@@ -1,0 +1,11 @@
+Required RPM
+This folder must contain the file:
+dynamicscaling-chart.rpm
+
+Make sure to use the RPM that matches the processor architecture in use:
+x86_64
+aarch64
+
+Version compatibility
+If the Dynamic Scaling logs were created with a version earlier than 2.1, you must use dynamicscaling-chart 1.0.
+If the Dynamic Scaling logs were created with version 2.1 or later, you must use dynamicscaling-chart 2.1.
