@@ -51,6 +51,9 @@ ROOTDIR=$(PWD)
 ODYSCHART_PATH="/opt/dynamicscaling-chart/dynamicscaling-chart.bin"
 ODYSCHARTRPM_PATH=./odys_chart/dynamicscaling-chart-*.rpm
 
+# Log file for command output
+LOG_FILE=$(ROOTDIR)/odys-tig.log
+
 # Valid TYPE values for extraction targets
 VALID_TYPES_MEXTRACT  := cocpu cload pload nload
 VALID_TYPES_MTEXTRACT := tocpu cload pload nload
@@ -79,16 +82,31 @@ CONTAINERS := odys-grafana odys-telegraf odys-influxdb
 #  REUSABLE FUNCTIONS                                                         #
 ###############################################################################
 
+# Initialize log file with timestamp
+define init_log
+	@echo "==============================================================================" >> $(LOG_FILE)
+	@echo "ODyS-TIG Log - $$(date '+%Y-%m-%d %H:%M:%S')" >> $(LOG_FILE)
+	@echo "Target: $(1)" >> $(LOG_FILE)
+	@echo "==============================================================================" >> $(LOG_FILE)
+endef
+
+# Log a message
+define log_msg
+	@echo "$$(date '+%Y-%m-%d %H:%M:%S') - $(1)" >> $(LOG_FILE)
+endef
+
 # Print section header
 define print_header
 	@echo -e "$(COLOUR_YELLOW)-------------------------$(COLOUR_END)"
 	@echo -e "$(COLOUR_YELLOW)$(1)$(COLOUR_END)"
 	@echo -e "$(COLOUR_YELLOW)-------------------------$(COLOUR_END)"
+	$(call log_msg,$(1))
 endef
 
 # Print info message
 define print_info
 	@echo -e "$(COLOUR_BLUE)...$(1)$(COLOUR_END)"
+	$(call log_msg,$(1))
 endef
 
 # Print success message
@@ -100,7 +118,7 @@ endef
 # $(1) = display name, $(2) = chart flag
 define run_extraction
 	$(call print_header,📈 Extracting $(1) data...)
-	$(CONTAINER_ENGINE) run --rm \
+	@$(CONTAINER_ENGINE) run --rm \
 		-v "$(ROOTDIR)/odys_logs:/odys_logs:z" \
 		-v "$(ROOTDIR)/odys_csv:/odys_csv:z" \
 		--name odys-chart \
@@ -110,14 +128,14 @@ define run_extraction
 			--csv \
 			--nochart \
 			--log ./odys_logs/dynamicscaling.log \
-			--out ./odys_csv/odys_csv_new
+			--out ./odys_csv/odys_csv_new >> $(LOG_FILE) 2>&1
 	@chmod 666 ./odys_csv/odys_csv_new/*
 endef
 
 # Run odys-chart extraction with label
 # $(1) = chart flag, $(2) = log file, $(3) = label
 define run_extraction_labeled
-	$(CONTAINER_ENGINE) run --rm \
+	@$(CONTAINER_ENGINE) run --rm \
 		-v "$(ROOTDIR)/odys_logs:/odys_logs:z" \
 		-v "$(ROOTDIR)/odys_csv:/odys_csv:z" \
 		--name odys-chart \
@@ -127,7 +145,7 @@ define run_extraction_labeled
 			--csv --nochart \
 			--log ./odys_logs/$(2) \
 			--out ./odys_csv/odys_csv_new \
-			--label $(1)_$(3)
+			--label $(1)_$(3) >> $(LOG_FILE) 2>&1
 	@chmod 666 ./odys_csv/odys_csv_new/*
 endef
 
@@ -146,29 +164,29 @@ define import_dashboard
 	@jq -n --argjson dash "$$(cat grafana/provisioning/dashboards/ODyS-TIG\ -\ $(1)_$(2).json)" \
 		'{dashboard: $$dash, folderId: 0, overwrite: true}' \
 		| jq --arg title "ODyS-TIG - $(1) - $(2)" '.dashboard.id = "" | .dashboard.uid = "" | .dashboard.title = $$title' \
-		| curl -s -o /dev/null -X POST -H "Content-Type: application/json" \
+		| curl -s -X POST -H "Content-Type: application/json" \
 			-u $(GF_SECURITY_ADMIN_USER):$(GF_SECURITY_ADMIN_PASSWORD) \
 			"http://localhost:3000/api/dashboards/db" \
-			-d @-
+			-d @- >> $(LOG_FILE) 2>&1
 endef
 
 # Common cleanup operations
 define cleanup_common
 	$(call print_info,stopping ODyS-TIG compose)
-	-@$(CONTAINER_COMPOSE) stop >/dev/null 2>&1 || true
+	-@$(CONTAINER_COMPOSE) stop >> $(LOG_FILE) 2>&1 || true
 	@echo
 	$(call print_info,removing ODyS-TIG containers)
 	@if echo "$(CONTAINER_ENGINE)" | grep -q docker; then \
-		$(CONTAINER_COMPOSE) rm --force -v >/dev/null 2>&1 || true; \
+		$(CONTAINER_COMPOSE) rm --force -v >> $(LOG_FILE) 2>&1 || true; \
 	else \
 		for c in $(CONTAINERS); do \
-			$(CONTAINER_ENGINE) rm -f $$c >/dev/null 2>&1 || true; \
+			$(CONTAINER_ENGINE) rm -f $$c >> $(LOG_FILE) 2>&1 || true; \
 		done; \
 	fi
 	@if echo "$(CONTAINER_ENGINE)" | grep -q podman; then \
 		echo -e "$(COLOUR_BLUE)...removing volumes & network$(COLOUR_END)"; \
-		$(CONTAINER_ENGINE) volume ls -qf dangling=true 2>/dev/null | xargs -r $(CONTAINER_ENGINE) volume rm >/dev/null 2>&1 || true; \
-		$(CONTAINER_ENGINE) network rm $$($(CONTAINER_ENGINE) network ls --filter=name='odys*' -q 2>/dev/null) >/dev/null 2>&1 || true; \
+		$(CONTAINER_ENGINE) volume ls -qf dangling=true 2>> $(LOG_FILE) | xargs -r $(CONTAINER_ENGINE) volume rm >> $(LOG_FILE) 2>&1 || true; \
+		$(CONTAINER_ENGINE) network rm $$($(CONTAINER_ENGINE) network ls --filter=name='odys*' -q 2>> $(LOG_FILE)) >> $(LOG_FILE) 2>&1 || true; \
 	fi
 	@echo
 	$(call print_info,removing csv entries)
@@ -248,6 +266,7 @@ setup_mop: setup mop
 ###############################################################################
 
 setup:
+	$(call init_log,setup)
 	$(call print_header,🔧 Making the ODyS-TIG...)
 ifeq (,$(wildcard $(ODYSCHARTRPM_PATH)))
 	@echo -e "$(COLOUR_RED)Missing dynamicscaling-chart.rpm$(COLOUR_END)"
@@ -264,69 +283,82 @@ else
 endif
 	@echo
 	$(call print_info,making odys-chart container)
-	$(CONTAINER_ENGINE) build -t odys-chart ./
+	@$(CONTAINER_ENGINE) build -t odys-chart ./ >> $(LOG_FILE) 2>&1
 	@echo
 	$(call print_info,setting permissions for telegraf directories)
 	@chmod 777 ./odys_csv/odys_csv_new ./odys_csv/odys_csv_old ./odys_csv/odys_csv_err ./telegraf/log
 	@echo
 	$(call print_info,making ODyS-TIG compose)
-	@TIG_ROOT=$(COMPOSE_ROOT) $(CONTAINER_COMPOSE) -f compose.yml --env-file config.env up -d
+	@TIG_ROOT=$(COMPOSE_ROOT) $(CONTAINER_COMPOSE) -f compose.yml --env-file config.env up -d >> $(LOG_FILE) 2>&1
 	@sleep 10
 	@echo
 	$(call print_info,setup grafana container)
-	$(CONTAINER_ENGINE) stop odys-grafana
+	@$(CONTAINER_ENGINE) stop odys-grafana >> $(LOG_FILE) 2>&1
 	@cp $(HOST_PROJECT_PATH)/grafana/provisioning/datasources/datasource.yml $(DATASOURCE_TEMP_FILE)
 	@sed -i $(SED_INPLACE_EXT) 's|PLACEHOLDER_INFLUXDB_ORG|$(INFLUXDB_INIT_ORG)|g' $(DATASOURCE_TEMP_FILE)
 	@sed -i $(SED_INPLACE_EXT) 's|PLACEHOLDER_INFLUXDB_TOKEN|"Token $(INFLUXDB_INIT_ADMIN_TOKEN)"|g' $(DATASOURCE_TEMP_FILE)
-	@$(CONTAINER_ENGINE) cp $(DATASOURCE_TEMP_FILE) odys-grafana:/etc/grafana/provisioning/datasources/datasource.yml
-	$(CONTAINER_ENGINE) start odys-grafana
+	@$(CONTAINER_ENGINE) cp $(DATASOURCE_TEMP_FILE) odys-grafana:/etc/grafana/provisioning/datasources/datasource.yml >> $(LOG_FILE) 2>&1
+	@$(CONTAINER_ENGINE) start odys-grafana >> $(LOG_FILE) 2>&1
 	@sleep 5
 	$(call print_success,-----------------------------------------------------------)
+	$(call print_success,📋 Log file: $(LOG_FILE))
 	$(call print_success,✅ ODyS-TIG is ready. Browse to http://localhost:3000)
 	$(call print_success,-----------------------------------------------------------)
 
 cleanup:
+	$(call init_log,cleanup)
 	$(call print_header,🧹 Cleaning up ODyS-TIG...)
 	$(call cleanup_common)
 	$(call print_success,---------------------------)
+	$(call print_success,📋 Log file: $(LOG_FILE))
 	$(call print_success,✅ ODyS-TIG cleanup done!)
 	$(call print_success,---------------------------)
 
 cleanupall:
+	$(call init_log,cleanupall)
 	$(call print_header,🧹 Cleaning up ODyS-TIG (full)...)
 	$(call print_info,removing odys-chart image)
-	@-$(CONTAINER_ENGINE) rmi odys-chart 2>/dev/null || true
+	@-$(CONTAINER_ENGINE) rmi odys-chart >> $(LOG_FILE) 2>&1 || true
 	@echo
 	$(call cleanup_common)
 	@echo
 	$(call print_info,removing tig images)
 	@if echo "$(CONTAINER_ENGINE)" | grep -q podman; then \
-		$(CONTAINER_ENGINE) rmi container-registry.oracle.com/os/oraclelinux:8-slim docker.io/library/telegraf docker.io/library/influxdb:2.7 docker.io/grafana/grafana --force 2>/dev/null || true; \
+		$(CONTAINER_ENGINE) rmi container-registry.oracle.com/os/oraclelinux:8-slim docker.io/library/telegraf docker.io/library/influxdb:2.7 docker.io/grafana/grafana --force >> $(LOG_FILE) 2>&1 || true; \
 	else \
-		$(CONTAINER_ENGINE) rmi oraclelinux:8-slim telegraf influxdb:2.7 grafana/grafana --force 2>/dev/null || true; \
+		$(CONTAINER_ENGINE) rmi oraclelinux:8-slim telegraf influxdb:2.7 grafana/grafana --force >> $(LOG_FILE) 2>&1 || true; \
 	fi
 	$(call print_success,---------------------------)
+	$(call print_success,📋 Log file: $(LOG_FILE))
 	$(call print_success,✅ ODyS-TIG cleanup done!)
 	$(call print_success,---------------------------)
 
 start:
+	$(call init_log,start)
 	$(call print_header,🚀 Starting ODyS-TIG...)
-	@$(CONTAINER_COMPOSE) start
+	@$(CONTAINER_COMPOSE) start >> $(LOG_FILE) 2>&1
 	$(call print_success,-----------------------------------------------------------)
+	$(call print_success,📋 Log file: $(LOG_FILE))
 	$(call print_success,✅ ODyS-TIG is ready. Browse to http://localhost:3000)
 	$(call print_success,-----------------------------------------------------------)
 
 stop:
+	$(call init_log,stop)
 	$(call print_header,🛑 Stopping ODyS-TIG...)
-	@$(CONTAINER_COMPOSE) stop
+	@$(CONTAINER_COMPOSE) stop >> $(LOG_FILE) 2>&1
+	$(call print_success,---------------------------)
+	$(call print_success,📋 Log file: $(LOG_FILE))
+	$(call print_success,✅ ODyS-TIG stopped!)
+	$(call print_success,---------------------------)
 
 status:
+	$(call init_log,status)
 	$(call print_header,🔎 ODyS-TIG Status)
 	$(call print_info,ODyS-TIG containers)
-	@$(CONTAINER_ENGINE) container ls --filter "name=odys*"
+	@$(CONTAINER_ENGINE) container ls --filter "name=odys*" 2>> $(LOG_FILE)
 	@echo
 	$(call print_info,ODyS-TIG images)
-	@$(CONTAINER_ENGINE) images --filter reference="*telegraf" --filter reference="*influxdb" --filter reference="*grafana/grafana" --filter reference="*odys-chart"
+	@$(CONTAINER_ENGINE) images --filter reference="*telegraf" --filter reference="*influxdb" --filter reference="*grafana/grafana" --filter reference="*odys-chart" 2>> $(LOG_FILE)
 
 ct:
 	$(call print_info,🦭 Connecting to telegraf...)
@@ -346,24 +378,30 @@ cg:
 
 monc: ocpu nload cload
 	$(call print_success,-----------------------------------------------------------)
+	$(call print_success,📋 Log file: $(LOG_FILE))
 	$(call print_success,✅ ODyS-TIG measure ready!)
 	$(call print_success,-----------------------------------------------------------)
 
 mop: ocpu pload
 	$(call print_success,-----------------------------------------------------------)
+	$(call print_success,📋 Log file: $(LOG_FILE))
 	$(call print_success,✅ ODyS-TIG measure ready!)
 	$(call print_success,-----------------------------------------------------------)
 
 ocpu:
+	$(call init_log,ocpu)
 	$(call run_extraction,OCPU,cocpu)
 
 nload:
+	$(call init_log,nload)
 	$(call run_extraction,Node Load,nload)
 
 cload:
+	$(call init_log,cload)
 	$(call run_extraction,Cluster Load,cload)
 
 pload:
+	$(call init_log,pload)
 	$(call run_extraction,Plugin Load,pload)
 
 ###############################################################################
@@ -380,6 +418,7 @@ endif
 ifndef LABEL
 	$(error LABEL is undefined)
 endif
+	$(call init_log,mextract TYPE=$(TYPE) LABEL=$(LABEL))
 	@echo
 	$(call print_header,📜 Extracting $(TYPE) data...)
 	$(call run_extraction_labeled,$(TYPE),$(LOG),$(LABEL))
@@ -409,6 +448,7 @@ endif
 ifndef LABEL
 	$(error LABEL is undefined)
 endif
+	$(call init_log,mtextract TYPE=$(TYPE) LABEL=$(LABEL))
 	@echo
 	$(call print_header,📜 Extracting $(TYPE) data...)
 	$(call run_extraction_labeled,$(TYPE),$(LOG),$(LABEL))
